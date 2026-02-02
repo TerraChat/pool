@@ -1,9 +1,9 @@
 
 import React, { useState, useCallback } from 'react';
-import PoolTable from './components/PoolTable';
-import MainMenu from './components/MainMenu';
-import Lobby from './components/Lobby';
-import { GameMode, PlayerRole } from './types';
+import PoolTable from './components/PoolTable.tsx';
+import MainMenu from './components/MainMenu.tsx';
+import Lobby from './components/Lobby.tsx';
+import { GameMode, PlayerRole } from './types.ts';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<'menu' | 'lobby' | 'game'>('menu');
@@ -58,9 +58,9 @@ const App: React.FC = () => {
       )}
 
       {screen === 'game' && (
-        <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in duration-700">
+        <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in duration-500">
           <PoolTable 
-            key={roomCode || 'single'} // Key ensures full remount if game changes
+            key={roomCode || gameMode} 
             gameMode={gameMode} 
             role={role} 
             roomCode={roomCode} 

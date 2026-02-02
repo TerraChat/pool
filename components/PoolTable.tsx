@@ -10,11 +10,11 @@ import {
   MAX_POWER,
   PLAY_AREA_W,
   PLAY_AREA_H
-} from '../constants';
-import { Ball, Pocket, GameMode, PlayerRole, GameState } from '../types';
-import { updateBallPhysics, resolveBallCollisions, resolveRailCollisions } from '../services/physicsEngine';
-import { initialGameState } from '../services/gameLogic';
-import HUD from './HUD';
+} from '../constants.ts';
+import { Ball, Pocket, GameMode, PlayerRole, GameState } from '../types.ts';
+import { updateBallPhysics, resolveBallCollisions, resolveRailCollisions } from '../services/physicsEngine.ts';
+import { initialGameState } from '../services/gameLogic.ts';
+import HUD from './HUD.tsx';
 
 interface PoolTableProps {
   gameMode: GameMode;
@@ -54,9 +54,11 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
   useEffect(() => {
     isMounted.current = true;
     if (gameMode === 'online') {
-      setTimeout(() => isMounted.current && setConnecting(false), 1500);
+      const timer = setTimeout(() => {
+        if (isMounted.current) setConnecting(false);
+      }, 1200);
+      return () => clearTimeout(timer);
     }
-    return () => { isMounted.current = false; };
   }, [gameMode]);
 
   useEffect(() => {
@@ -66,26 +68,28 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
     if (!ctx) return;
 
     const wCanvas = document.createElement('canvas');
-    wCanvas.width = 128; wCanvas.height = 128;
+    wCanvas.width = 64; wCanvas.height = 64;
     const wCtx = wCanvas.getContext('2d')!;
-    wCtx.fillStyle = '#111111';
-    wCtx.fillRect(0,0,128,128);
-    for(let i=0; i<30; i++) {
+    wCtx.fillStyle = '#0f0f0f';
+    wCtx.fillRect(0,0,64,64);
+    for(let i=0; i<15; i++) {
         wCtx.fillStyle = `rgba(255,255,255,${0.02 + Math.random()*0.02})`;
-        wCtx.fillRect(0, Math.random()*128, 128, Math.random()*2);
+        wCtx.fillRect(0, Math.random()*64, 64, 1);
     }
     woodPatternRef.current = ctx.createPattern(wCanvas, 'repeat');
 
     const fCanvas = document.createElement('canvas');
-    fCanvas.width = 256; fCanvas.height = 256;
+    fCanvas.width = 128; fCanvas.height = 128;
     const fCtx = fCanvas.getContext('2d')!;
-    fCtx.fillStyle = '#052c14';
-    fCtx.fillRect(0,0,256,256);
-    for(let i=0; i<6000; i++) {
-        fCtx.fillStyle = `rgba(255,255,255,${Math.random()*0.03})`;
-        fCtx.fillRect(Math.random()*256, Math.random()*256, 1, 1);
+    fCtx.fillStyle = '#062610';
+    fCtx.fillRect(0,0,128,128);
+    for(let i=0; i<2000; i++) {
+        fCtx.fillStyle = `rgba(255,255,255,${Math.random()*0.02})`;
+        fCtx.fillRect(Math.random()*128, Math.random()*128, 1, 1);
     }
     feltPatternRef.current = ctx.createPattern(fCanvas, 'repeat');
+
+    return () => { isMounted.current = false; };
   }, []);
 
   const handleTurnEnd = useCallback(() => {
@@ -170,6 +174,8 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
     const ctx = canvas.getContext('2d', { alpha: false })!;
 
     const frame = () => {
+      if (!isMounted.current) return;
+      
       // Physics
       let anyMoving = false;
       for (let s = 0; s < SUB_STEPS; s++) {
@@ -205,15 +211,12 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
       ballsRef.current.forEach(ball => {
         if (ball.inPocket) return;
         
-        // Shadow
         ctx.beginPath(); ctx.arc(ball.x + 2, ball.y + 2, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
 
-        // Ball Body
         ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
         ctx.fillStyle = ball.color; ctx.fill();
         
-        // Stripe Overlay
         if (ball.type === 'stripe') {
           ctx.save();
           ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
@@ -223,15 +226,11 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
           ctx.restore();
         }
 
-        // Ball Numbering
         if (ball.type !== 'cue') {
-            // White circle for number
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, BALL_RADIUS * 0.45, 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
             ctx.fill();
-
-            // Numeral
             ctx.fillStyle = '#000000';
             ctx.font = `bold ${BALL_RADIUS * 0.6}px Inter, sans-serif`;
             ctx.textAlign = 'center';
@@ -239,7 +238,6 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
             ctx.fillText(ball.num.toString(), ball.x, ball.y + 0.5);
         }
 
-        // 3D Highlight
         const grad = ctx.createRadialGradient(ball.x - 4, ball.y - 4, 1, ball.x - 4, ball.y - 4, 8);
         grad.addColorStop(0, 'rgba(255,255,255,0.4)');
         grad.addColorStop(1, 'rgba(255,255,255,0)');
@@ -247,7 +245,7 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
         ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2); ctx.fill();
       });
 
-      // Aiming UI
+      // Aiming Guide
       const cueBall = ballsRef.current.find(b => b.type === 'cue');
       if (cueBall && isAimingRef.current && !isMoving && !gameState.gameOver && !connecting) {
         const curAngle = aimAngleRef.current;
@@ -266,7 +264,7 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
           }
         });
 
-        const impactDist = closest ? minDist : 800;
+        const impactDist = closest ? minDist : 1000;
         const impactX = cueBall.x + Math.cos(curAngle) * impactDist;
         const impactY = cueBall.y + Math.sin(curAngle) * impactDist;
 
@@ -278,20 +276,13 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
         if (closest) {
           ctx.beginPath(); ctx.arc(impactX, impactY, BALL_RADIUS, 0, Math.PI * 2);
           ctx.setLineDash([]); ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.stroke();
-
           const targetAngle = Math.atan2(closest.y - impactY, closest.x - impactX);
           ctx.beginPath(); ctx.moveTo(closest.x, closest.y);
-          ctx.lineTo(closest.x + Math.cos(targetAngle) * 100, closest.y + Math.sin(targetAngle) * 100);
+          ctx.lineTo(closest.x + Math.cos(targetAngle) * 80, closest.y + Math.sin(targetAngle) * 80);
           ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2; ctx.stroke();
-
-          const cueAngle = targetAngle + Math.PI/2 * (Math.sin(curAngle - targetAngle) > 0 ? 1 : -1);
-          ctx.beginPath(); ctx.setLineDash([2, 4]);
-          ctx.moveTo(impactX, impactY); ctx.lineTo(impactX + Math.cos(cueAngle) * 60, impactY + Math.sin(cueAngle) * 60);
-          ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.stroke();
         }
         ctx.restore();
 
-        // Cue Stick
         ctx.save();
         ctx.translate(cueBall.x, cueBall.y); ctx.rotate(curAngle + Math.PI);
         const pullback = 25 + shotPowerRef.current * 3.5;
@@ -336,25 +327,12 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
     }
   };
 
-  useEffect(() => {
-    if (gameMode === 'robot' && gameState.currentTurn === 2 && !isMoving && !gameState.gameOver) {
-      const timer = setTimeout(() => {
-        if (!isMounted.current) return;
-        const cueBall = ballsRef.current.find(b => b.type === 'cue')!;
-        const targets = ballsRef.current.filter(b => !b.inPocket && b.type !== 'cue');
-        const target = targets[Math.floor(Math.random() * targets.length)];
-        fireShot(15 + Math.random() * 20, Math.atan2(target.y - cueBall.y, target.x - cueBall.x));
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState.currentTurn, gameMode, isMoving, gameState.gameOver, fireShot]);
-
   return (
     <div className="flex flex-col items-center select-none w-full max-w-5xl px-4">
       {gameMode === 'online' && (
-        <div className="w-full bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 py-2 px-6 rounded-xl mb-4 flex justify-between items-center animate-in fade-in slide-in-from-top duration-500">
+        <div className="w-full bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 py-2 px-6 rounded-xl mb-4 flex justify-between items-center animate-in fade-in slide-in-from-top">
            <span className="text-xs font-black tracking-widest uppercase">Room: {roomCode}</span>
-           <span className="text-xs font-bold bg-cyan-500 text-black px-2 py-0.5 rounded">CONNECTED</span>
+           <span className="text-xs font-bold bg-cyan-500 text-black px-2 py-0.5 rounded uppercase">Simulating Room</span>
         </div>
       )}
 
@@ -378,24 +356,13 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
         {connecting && (
           <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center z-10">
             <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm font-black text-white tracking-widest">CONNECTING TO ROOM...</p>
+            <p className="text-sm font-black text-white tracking-widest">CONNECTING...</p>
           </div>
         )}
       </div>
 
-      <div className="mt-8 flex gap-8 items-center justify-center opacity-40 hover:opacity-100 transition-opacity">
-        <div className="flex flex-col items-center">
-           <div className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Drag to aim</div>
-           <div className="w-6 h-6 rounded-full border border-neutral-700 flex items-center justify-center">
-              <div className="w-1 h-1 bg-white rounded-full" />
-           </div>
-        </div>
-        <div className="flex flex-col items-center">
-           <div className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Power Meter</div>
-           <div className="w-24 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-              <div className="h-full bg-cyan-500 w-1/3" />
-           </div>
-        </div>
+      <div className="mt-8 flex gap-8 items-center justify-center opacity-40">
+        <span className="text-[10px] font-black tracking-[0.2em] text-neutral-500 uppercase">Pro Elite Simulation Engine</span>
       </div>
 
       {gameState.gameOver && (
@@ -404,8 +371,8 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
             {gameState.winner === 1 ? 'PLAYER 1 WINS' : 'PLAYER 2 WINS'}
           </h1>
           <button 
-            onClick={() => window.location.reload()}
-            className="mt-12 px-12 py-5 bg-cyan-500 text-black font-black rounded-2xl hover:bg-cyan-400 transition-all hover:scale-110 active:scale-95 shadow-[0_10px_40px_rgba(34,211,238,0.3)]"
+            onClick={onExit}
+            className="mt-12 px-12 py-5 bg-cyan-500 text-black font-black rounded-2xl hover:bg-cyan-400 transition-all hover:scale-110 shadow-[0_10px_40px_rgba(34,211,238,0.3)]"
           >
             RETURN TO MENU
           </button>

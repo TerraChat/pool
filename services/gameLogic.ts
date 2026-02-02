@@ -1,6 +1,6 @@
 
-import { Ball, BallType, GameState } from '../types';
-import { BALL_RADIUS, TABLE_WIDTH, TABLE_HEIGHT, RAIL_SIZE, BALL_COLORS } from '../constants';
+import { Ball, BallType, GameState } from '../types.ts';
+import { BALL_RADIUS, TABLE_WIDTH, TABLE_HEIGHT, RAIL_SIZE, BALL_COLORS } from '../constants.ts';
 
 export const initialGameState = (): GameState => ({
   currentTurn: 1,
@@ -15,7 +15,6 @@ export const initialGameState = (): GameState => ({
 
 function rackBalls(): Ball[] {
   const balls: Ball[] = [];
-  // Cue Ball
   balls.push({
     id: 0,
     x: TABLE_WIDTH * 0.25 + RAIL_SIZE,
@@ -43,6 +42,7 @@ function rackBalls(): Ball[] {
   for (let col = 0; col < 5; col++) {
     for (let row = 0; row <= col; row++) {
       const b = rack[idx++];
+      if (!b) continue;
       const x = startX + col * (BALL_RADIUS * 1.732);
       const y = startY + (row * (BALL_RADIUS * 2)) - (col * BALL_RADIUS);
       balls.push({

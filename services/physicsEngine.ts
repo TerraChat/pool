@@ -1,5 +1,5 @@
 
-import { Ball, Pocket } from '../types';
+import { Ball, Pocket } from '../types.ts';
 import { 
   SUB_STEPS, 
   RESTITUTION, 
@@ -10,7 +10,7 @@ import {
   RAIL_SIZE, 
   TABLE_WIDTH, 
   TABLE_HEIGHT 
-} from '../constants';
+} from '../constants.ts';
 
 export const updateBallPhysics = (ball: Ball, dt: number): boolean => {
   if (ball.inPocket) return false;
@@ -37,7 +37,6 @@ export const updateBallPhysics = (ball: Ball, dt: number): boolean => {
 export const resolveRailCollisions = (ball: Ball, pockets: Pocket[]) => {
   if (ball.inPocket) return;
 
-  // Only bounce if NOT in a pocket zone
   const inPocketZone = (x: number, y: number) => {
     return pockets.some(p => Math.hypot(x - p.x, y - p.y) < p.radius + 10);
   };
@@ -55,7 +54,7 @@ export const resolveRailCollisions = (ball: Ball, pockets: Pocket[]) => {
     ball.vx = -Math.abs(ball.vx) * RAIL_RESTITUTION;
   }
 
-  if (ball.y < top && !inPocketZone(ball.y, ball.y)) {
+  if (ball.y < top && !inPocketZone(ball.x, ball.y)) {
     ball.y = top;
     ball.vy = Math.abs(ball.vy) * RAIL_RESTITUTION;
   } else if (ball.y > bottom && !inPocketZone(ball.x, ball.y)) {
@@ -81,38 +80,30 @@ export const resolveBallCollisions = (balls: Ball[]): Ball | null => {
 
       if (distSq < minDist * minDist) {
         const dist = Math.sqrt(distSq);
-        
-        // Logical Hit Detection
-        if (b1 === cueBall && !firstHit) firstHit = b2;
-        if (b2 === cueBall && !firstHit) firstHit = b1;
+        if ((b1 === cueBall || b2 === cueBall) && !firstHit) {
+          firstHit = b1 === cueBall ? b2 : b1;
+        }
 
         const nx = dx / dist;
         const ny = dy / dist;
-
-        // Static Unstick
         const overlap = (minDist - dist) / 2;
         b1.x -= overlap * nx;
         b1.y -= overlap * ny;
         b2.x += overlap * nx;
         b2.y += overlap * ny;
 
-        // Dynamic impulse
         const rvx = b2.vx - b1.vx;
         const rvy = b2.vy - b1.vy;
         const velAlongNormal = rvx * nx + rvy * ny;
-
         if (velAlongNormal > 0) continue;
 
         let impulse = -(1 + RESTITUTION) * velAlongNormal;
         impulse /= 2;
 
-        const impulseX = impulse * nx;
-        const impulseY = impulse * ny;
-
-        b1.vx -= impulseX;
-        b1.vy -= impulseY;
-        b2.vx += impulseX;
-        b2.vy += impulseY;
+        b1.vx -= impulse * nx;
+        b1.vy -= impulse * ny;
+        b2.vx += impulse * nx;
+        b2.vy += impulse * ny;
       }
     }
   }
