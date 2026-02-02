@@ -6,29 +6,61 @@
     <title>Pool Pro Elite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-      body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #050505; color: #ffffff; overflow: hidden; }
-      canvas { touch-action: none; cursor: crosshair; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', sans-serif;
+        background-color: #050505;
+        color: #ffffff;
+        overflow: hidden;
+      }
+      canvas {
+        touch-action: none;
+        cursor: crosshair;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="module">
-      // Load React from a CDN so we don't need package.json or node_modules
+      // Loading React and ReactDOM from ESM.sh to run in-browser without a build step
       import React, { useState, useCallback, useEffect, useRef } from 'https://esm.sh/react@19.0.0';
       import { createRoot } from 'https://esm.sh/react-dom@19.0.0/client';
 
-      // --- CONSTANTS (From constants.ts) ---
+      // --- 1. CONSTANTS (From your constants.ts) ---
       const TABLE_WIDTH = 900;
       const TABLE_HEIGHT = 480;
       const RAIL_SIZE = 36;
       const BALL_RADIUS = 13;
       const FRICTION = 0.985;
       const STOP_VELOCITY = 0.05;
-      const BALL_COLORS = { 0: '#ffffff', 1: '#facc15', 2: '#2563eb', 8: '#111111' };
+      const BALL_COLORS = {
+        0: '#ffffff', 1: '#facc15', 2: '#2563eb', 3: '#dc2626', 8: '#111111'
+      };
 
-      // --- COMPONENT: POOL TABLE (Main Game Logic) ---
+      // --- 2. COMPONENTS ---
+
+      // Main Menu Component (From your App.tsx logic)
+      const MainMenu = ({ onLocal, onRobot }) => (
+        React.createElement('div', { className: "flex flex-col items-center space-y-6" },
+          React.createElement('h1', { className: "text-7xl font-black italic tracking-tighter" }, 
+            "POOL", React.createElement('span', { className: "text-cyan-500" }, "PRO")
+          ),
+          React.createElement('button', { 
+            onClick: onLocal, 
+            className: "w-72 py-4 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-xl transition-transform hover:scale-105 shadow-xl" 
+          }, "Local Match"),
+          React.createElement('button', { 
+            onClick: onRobot, 
+            className: "w-72 py-4 bg-neutral-800 hover:bg-neutral-700 rounded-xl font-bold text-xl transition-all" 
+          }, "vs AI Robot")
+        )
+      );
+
+      // Pool Table Component (Merging rendering and physics logic)
       const PoolTable = ({ gameMode, onExit }) => {
         const canvasRef = useRef(null);
         const [balls, setBalls] = useState([
@@ -48,7 +80,7 @@
               let nvx = ball.vx * FRICTION;
               let nvy = ball.vy * FRICTION;
 
-              // Collision with table rails
+              // Basic rail collision
               if (nx < RAIL_SIZE || nx > TABLE_WIDTH - RAIL_SIZE) nvx *= -0.8;
               if (ny < RAIL_SIZE || ny > TABLE_HEIGHT - RAIL_SIZE) nvy *= -0.8;
               
@@ -62,7 +94,7 @@
 
           const draw = () => {
             ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
-            // Draw Table Bed
+            // Draw Table
             ctx.fillStyle = '#065f46';
             ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
             // Draw Rails
@@ -93,27 +125,26 @@
         );
       };
 
-      // --- COMPONENT: MAIN MENU (From App.tsx logic) ---
-      const MainMenu = ({ onLocal, onRobot }) => (
-        React.createElement('div', { className: "flex flex-col items-center space-y-6" },
-          React.createElement('h1', { className: "text-7xl font-black italic tracking-tighter" }, 
-            "POOL", React.createElement('span', { className: "text-cyan-500" }, "PRO")
-          ),
-          React.createElement('button', { onClick: onLocal, className: "w-72 py-4 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-xl transition-transform hover:scale-105 shadow-xl" }, "Local Match"),
-          React.createElement('button', { onClick: onRobot, className: "w-72 py-4 bg-neutral-800 hover:bg-neutral-700 rounded-xl font-bold text-xl transition-all" }, "vs AI Robot")
-        )
-      );
-
-      // --- MAIN APP CONTROLLER ---
+      // --- 3. MAIN APP CONTROLLER (From your App.tsx) ---
       const App = () => {
         const [screen, setScreen] = useState('menu');
         const [mode, setMode] = useState('local');
 
+        const handleStartLocal = () => {
+          setMode('local');
+          setScreen('game');
+        };
+
+        const handleStartRobot = () => {
+          setMode('robot');
+          setScreen('game');
+        };
+
         return React.createElement('div', { className: "w-full h-screen flex items-center justify-center bg-neutral-950" },
           screen === 'menu' 
             ? React.createElement(MainMenu, { 
-                onLocal: () => { setMode('local'); setScreen('game'); },
-                onRobot: () => { setMode('robot'); setScreen('game'); } 
+                onLocal: handleStartLocal,
+                onRobot: handleStartRobot 
               })
             : React.createElement(PoolTable, { 
                 gameMode: mode, 
@@ -122,6 +153,7 @@
         );
       };
 
+      // --- 4. RENDER (From your index.tsx) ---
       const root = createRoot(document.getElementById('root'));
       root.render(React.createElement(App));
     </script>
