@@ -2,161 +2,71 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pool Pro Elite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-      body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #050505; color: #ffffff; overflow: hidden; }
-      canvas { touch-action: none; cursor: crosshair; }
+        body { margin: 0; background-color: #050505; color: white; overflow: hidden; font-family: sans-serif; }
+        canvas { touch-action: none; border: 8px solid #451a03; border-radius: 12px; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="module">
-      import React, { useState, useCallback, useEffect, useRef } from 'https://esm.sh/react@19.0.0';
-      import { createRoot } from 'https://esm.sh/react-dom@19.0.0/client';
+        // Using esm.sh ensures the browser can run React without a build step
+        import React, { useState, useEffect, useRef } from 'https://esm.sh/react@19.0.0';
+        import { createRoot } from 'https://esm.sh/react-dom@19.0.0/client';
 
-      // --- 1. CONSTANTS & PHYSICS TUNING ---
-      const TABLE_WIDTH = 900;
-      const TABLE_HEIGHT = 480;
-      const RAIL_SIZE = 36;
-      const BALL_RADIUS = 13;
-      const POCKET_RADIUS = 30;
-      const FRICTION = 0.985;
-      const STOP_VELOCITY = 0.05;
-      const THEME_COLOR = '#06b6d4';
+        // --- Constants ---
+        const W = 800, H = 400, BALL_R = 10;
 
-      const BALL_COLORS = {
-        0: '#ffffff', 1: '#facc15', 2: '#2563eb', 3: '#dc2626', 4: '#7c3aed',
-        5: '#ea580c', 6: '#16a34a', 7: '#991b1b', 8: '#111111'
-      };
+        const App = () => {
+            const [screen, setScreen] = useState('menu');
+            const canvasRef = useRef(null);
 
-      // --- 2. GAME ENGINE COMPONENT (Formerly PoolTable.tsx) ---
-      const PoolTable = ({ gameMode, onExit }) => {
-        const canvasRef = useRef(null);
-        const [gameState, setGameState] = useState({
-          balls: [
-            { id: 0, x: 250, y: 240, vx: 0, vy: 0, radius: BALL_RADIUS, color: BALL_COLORS[0], num: 0, inPocket: false },
-            { id: 1, x: 650, y: 240, vx: 0, vy: 0, radius: BALL_RADIUS, color: BALL_COLORS[1], num: 1, inPocket: false },
-            { id: 8, x: 675, y: 255, vx: 0, vy: 0, radius: BALL_RADIUS, color: BALL_COLORS[8], num: 8, inPocket: false }
-          ]
-        });
-
-        // Simple Physics Loop
-        useEffect(() => {
-          const canvas = canvasRef.current;
-          const ctx = canvas.getContext('2d');
-          let animationId;
-
-          const update = () => {
-            setGameState(prev => {
-              const newBalls = prev.balls.map(ball => {
-                if (ball.inPocket) return ball;
+            useEffect(() => {
+                if (screen !== 'game') return;
+                const ctx = canvasRef.current.getContext('2d');
                 
-                // Move balls
-                let nextX = ball.x + ball.vx;
-                let nextY = ball.y + ball.vy;
+                // Simple Draw Loop
+                const draw = () => {
+                    ctx.fillStyle = '#065f46'; // Table Green
+                    ctx.fillRect(0, 0, W, H);
+                    
+                    // Draw Cue Ball
+                    ctx.beginPath();
+                    ctx.arc(150, H/2, BALL_R, 0, Math.PI*2);
+                    ctx.fillStyle = 'white';
+                    ctx.fill();
+                    ctx.closePath();
+                    
+                    requestAnimationFrame(draw);
+                };
+                draw();
+            }, [screen]);
 
-                // Wall collisions
-                let nextVx = ball.vx * FRICTION;
-                let nextVy = ball.vy * FRICTION;
+            return React.createElement('div', { className: "flex flex-col items-center justify-center h-screen" },
+                screen === 'menu' ? 
+                React.createElement('div', { className: "text-center" },
+                    React.createElement('h1', { className: "text-6xl font-bold mb-8 text-cyan-500" }, "POOL PRO"),
+                    React.createElement('button', { 
+                        onClick: () => setScreen('game'),
+                        className: "bg-cyan-600 px-10 py-4 rounded-xl font-bold text-xl hover:bg-cyan-500 transition"
+                    }, "PLAY NOW")
+                ) : 
+                React.createElement('div', { className: "relative" },
+                    React.createElement('canvas', { ref: canvasRef, width: W, height: H }),
+                    React.createElement('button', { 
+                        onClick: () => setScreen('menu'),
+                        className: "mt-4 text-neutral-500 block w-full text-center"
+                    }, "Exit to Menu")
+                )
+            );
+        };
 
-                if (nextX < RAIL_SIZE || nextX > TABLE_WIDTH - RAIL_SIZE) nextVx *= -0.8;
-                if (nextY < RAIL_SIZE || nextY > TABLE_HEIGHT - RAIL_SIZE) nextVy *= -0.8;
-
-                // Stop small movements
-                if (Math.abs(nextVx) < STOP_VELOCITY) nextVx = 0;
-                if (Math.abs(nextVy) < STOP_VELOCITY) nextVy = 0;
-
-                return { ...ball, x: nextX, y: nextY, vx: nextVx, vy: nextVy };
-              });
-              return { ...prev, balls: newBalls };
-            });
-            animationId = requestAnimationFrame(update);
-          };
-
-          update();
-          return () => cancelAnimationFrame(animationId);
-        }, []);
-
-        // Render Table
-        useEffect(() => {
-          const ctx = canvasRef.current.getContext('2d');
-          ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
-          
-          // Draw Table Cloth
-          ctx.fillStyle = '#065f46';
-          ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
-          
-          // Draw Rails
-          ctx.fillStyle = '#451a03';
-          ctx.fillRect(0, 0, TABLE_WIDTH, RAIL_SIZE);
-          ctx.fillRect(0, TABLE_HEIGHT - RAIL_SIZE, TABLE_WIDTH, RAIL_SIZE);
-          ctx.fillRect(0, 0, RAIL_SIZE, TABLE_HEIGHT);
-          ctx.fillRect(TABLE_WIDTH - RAIL_SIZE, 0, RAIL_SIZE, TABLE_HEIGHT);
-
-          // Draw Balls
-          gameState.balls.forEach(ball => {
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fillStyle = ball.color;
-            ctx.fill();
-            ctx.closePath();
-          });
-        }, [gameState]);
-
-        return (
-          <div className="flex flex-col items-center animate-in fade-in duration-500">
-            <div className="mb-4 flex justify-between w-full max-w-[900px]">
-              <span className="text-cyan-400 font-bold">MODE: {gameMode}</span>
-              <button onClick={onExit} className="text-red-500 hover:text-red-400">Exit</button>
-            </div>
-            <canvas 
-              ref={canvasRef} 
-              width={TABLE_WIDTH} 
-              height={TABLE_HEIGHT} 
-              className="rounded-lg shadow-2xl border-4 border-neutral-800"
-            />
-          </div>
-        );
-      };
-
-      // --- 3. MENU COMPONENTS ---
-      const MainMenu = ({ onLocal, onRobot, onOnline }) => (
-        <div className="flex flex-col items-center space-y-4">
-          <h1 className="text-6xl font-black italic mb-12 tracking-tighter text-white">
-            POOL<span className="text-cyan-500">PRO</span>
-          </h1>
-          <button onClick={onLocal} className="w-72 py-4 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-xl transition-all hover:scale-105 shadow-lg shadow-cyan-900/20">Local Play</button>
-          <button onClick={onRobot} className="w-72 py-4 bg-neutral-800 hover:bg-neutral-700 rounded-xl font-bold text-xl transition-all">vs Robot</button>
-          <button onClick={onOnline} className="w-72 py-4 bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 rounded-xl font-bold text-xl transition-all text-neutral-400">Online Lobby</button>
-        </div>
-      );
-
-      // --- 4. MAIN APP CONTROLLER ---
-      const App = () => {
-        const [screen, setScreen] = useState('menu');
-        const [gameMode, setGameMode] = useState('local');
-
-        return (
-          <div className="relative w-full h-screen bg-neutral-950 flex items-center justify-center overflow-hidden">
-            {screen === 'menu' ? (
-              <MainMenu 
-                onLocal={() => { setGameMode('local'); setScreen('game'); }} 
-                onRobot={() => { setGameMode('robot'); setScreen('game'); }}
-                onOnline={() => setScreen('lobby')} 
-              />
-            ) : (
-              <PoolTable gameMode={gameMode} onExit={() => setScreen('menu')} />
-            )}
-          </div>
-        );
-      };
-
-      // --- 5. MOUNT ---
-      createRoot(document.getElementById('root')).render(React.createElement(App));
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
     </script>
 </body>
 </html>
