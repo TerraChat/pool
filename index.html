@@ -2,71 +2,127 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pool Pro Elite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; background-color: #050505; color: white; overflow: hidden; font-family: sans-serif; }
-        canvas { touch-action: none; border: 8px solid #451a03; border-radius: 12px; }
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+      body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #050505; color: #ffffff; overflow: hidden; }
+      canvas { touch-action: none; cursor: crosshair; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="module">
-        // Using esm.sh ensures the browser can run React without a build step
-        import React, { useState, useEffect, useRef } from 'https://esm.sh/react@19.0.0';
-        import { createRoot } from 'https://esm.sh/react-dom@19.0.0/client';
+      import React, { useState, useCallback, useEffect, useRef } from 'https://esm.sh/react@19.0.0';
+      import { createRoot } from 'https://esm.sh/react-dom@19.0.0/client';
 
-        // --- Constants ---
-        const W = 800, H = 400, BALL_R = 10;
+      // --- CONSTANTS (From your constants.ts) ---
+      const TABLE_WIDTH = 900;
+      const TABLE_HEIGHT = 480;
+      const RAIL_SIZE = 36;
+      const BALL_RADIUS = 13;
+      const FRICTION = 0.985;
+      const STOP_VELOCITY = 0.05;
+      const BALL_COLORS = { 0: '#ffffff', 1: '#facc15', 2: '#2563eb', 3: '#dc2626', 8: '#111111' };
 
-        const App = () => {
-            const [screen, setScreen] = useState('menu');
-            const canvasRef = useRef(null);
+      // --- COMPONENT: POOL TABLE (Consolidated Logic) ---
+      const PoolTable = ({ gameMode, onExit }) => {
+        const canvasRef = useRef(null);
+        const [balls, setBalls] = useState([
+          { id: 0, x: 250, y: 240, vx: 0, vy: 0, color: BALL_COLORS[0] },
+          { id: 1, x: 650, y: 240, vx: 0, vy: 0, color: BALL_COLORS[1] }
+        ]);
 
-            useEffect(() => {
-                if (screen !== 'game') return;
-                const ctx = canvasRef.current.getContext('2d');
-                
-                // Simple Draw Loop
-                const draw = () => {
-                    ctx.fillStyle = '#065f46'; // Table Green
-                    ctx.fillRect(0, 0, W, H);
-                    
-                    // Draw Cue Ball
-                    ctx.beginPath();
-                    ctx.arc(150, H/2, BALL_R, 0, Math.PI*2);
-                    ctx.fillStyle = 'white';
-                    ctx.fill();
-                    ctx.closePath();
-                    
-                    requestAnimationFrame(draw);
-                };
-                draw();
-            }, [screen]);
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext('2d');
+          let frameId;
 
-            return React.createElement('div', { className: "flex flex-col items-center justify-center h-screen" },
-                screen === 'menu' ? 
-                React.createElement('div', { className: "text-center" },
-                    React.createElement('h1', { className: "text-6xl font-bold mb-8 text-cyan-500" }, "POOL PRO"),
-                    React.createElement('button', { 
-                        onClick: () => setScreen('game'),
-                        className: "bg-cyan-600 px-10 py-4 rounded-xl font-bold text-xl hover:bg-cyan-500 transition"
-                    }, "PLAY NOW")
-                ) : 
-                React.createElement('div', { className: "relative" },
-                    React.createElement('canvas', { ref: canvasRef, width: W, height: H }),
-                    React.createElement('button', { 
-                        onClick: () => setScreen('menu'),
-                        className: "mt-4 text-neutral-500 block w-full text-center"
-                    }, "Exit to Menu")
-                )
-            );
-        };
+          const update = () => {
+            setBalls(prev => prev.map(ball => {
+              let nx = ball.x + ball.vx;
+              let ny = ball.y + ball.vy;
+              let nvx = ball.vx * FRICTION;
+              let nvy = ball.vy * FRICTION;
 
-        const root = createRoot(document.getElementById('root'));
-        root.render(React.createElement(App));
+              // Boundary checks (RAIL_SIZE)
+              if (nx < RAIL_SIZE || nx > TABLE_WIDTH - RAIL_SIZE) nvx *= -0.8;
+              if (ny < RAIL_SIZE || ny > TABLE_HEIGHT - RAIL_SIZE) nvy *= -0.8;
+              
+              if (Math.abs(nvx) < STOP_VELOCITY) nvx = 0;
+              if (Math.abs(nvy) < STOP_VELOCITY) nvy = 0;
+
+              return { ...ball, x: nx, y: ny, vx: nvx, vy: nvy };
+            }));
+            frameId = requestAnimationFrame(update);
+          };
+
+          const draw = () => {
+            ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+            // Table Bed
+            ctx.fillStyle = '#065f46';
+            ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+            // Rails
+            ctx.fillStyle = '#451a03';
+            ctx.fillRect(0, 0, TABLE_WIDTH, RAIL_SIZE);
+            ctx.fillRect(0, TABLE_HEIGHT - RAIL_SIZE, TABLE_WIDTH, RAIL_SIZE);
+
+            balls.forEach(ball => {
+              ctx.beginPath();
+              ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+              ctx.fillStyle = ball.color;
+              ctx.fill();
+              ctx.closePath();
+            });
+          };
+
+          draw();
+          update();
+          return () => cancelAnimationFrame(frameId);
+        }, [balls]);
+
+        return React.createElement('div', { className: "flex flex-col items-center" },
+          React.createElement('div', { className: "mb-4 flex justify-between w-full max-w-[900px] font-bold text-cyan-400" },
+            React.createElement('span', null, `MODE: ${gameMode.toUpperCase()}`),
+            React.createElement('button', { onClick: onExit, className: "text-red-500" }, "EXIT")
+          ),
+          React.createElement('canvas', { ref: canvasRef, width: TABLE_WIDTH, height: TABLE_HEIGHT, className: "rounded-lg border-4 border-neutral-800" })
+        );
+      };
+
+      // --- COMPONENT: MAIN MENU (From your App.tsx logic) ---
+      const MainMenu = ({ onLocal, onRobot }) => (
+        React.createElement('div', { className: "flex flex-col items-center space-y-6" },
+          React.createElement('h1', { className: "text-7xl font-black italic tracking-tighter" }, 
+            "POOL", React.createElement('span', { className: "text-cyan-500" }, "PRO")
+          ),
+          React.createElement('button', { onClick: onLocal, className: "w-72 py-4 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-xl transition-transform hover:scale-105" }, "Local Match"),
+          React.createElement('button', { onClick: onRobot, className: "w-72 py-4 bg-neutral-800 hover:bg-neutral-700 rounded-xl font-bold text-xl transition-all" }, "vs AI Robot")
+        )
+      );
+
+      // --- MAIN APP ---
+      const App = () => {
+        const [screen, setScreen] = useState('menu');
+        const [mode, setMode] = useState('local');
+
+        return React.createElement('div', { className: "w-full h-screen flex items-center justify-center bg-neutral-950" },
+          screen === 'menu' 
+            ? React.createElement(MainMenu, { 
+                onLocal: () => { setMode('local'); setScreen('game'); },
+                onRobot: () => { setMode('robot'); setScreen('game'); } 
+              })
+            : React.createElement(PoolTable, { 
+                gameMode: mode, 
+                onExit: () => setScreen('menu') 
+              })
+        );
+      };
+
+      const root = createRoot(document.getElementById('root'));
+      root.render(React.createElement(App));
     </script>
 </body>
 </html>
