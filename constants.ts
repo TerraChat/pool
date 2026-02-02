@@ -17,21 +17,23 @@ export const DRAG_PER_STEP = 0.006;
 export const STOP_VELOCITY = 0.05;
 export const MAX_POWER = 55;
 
+export const THEME_COLOR = '#06b6d4'; // Electric Cyan
+
 export const BALL_COLORS: Record<number, string> = {
   0: '#ffffff', // Cue
-  1: '#ffcc00', // Yellow
-  2: '#0066cc', // Blue
-  3: '#cc2200', // Red
-  4: '#6600aa', // Purple
-  5: '#ff7700', // Orange
-  6: '#008800', // Green
-  7: '#882222', // Maroon
+  1: '#facc15', // Yellow (Standard)
+  2: '#2563eb', // Blue
+  3: '#dc2626', // Red
+  4: '#7c3aed', // Purple
+  5: '#ea580c', // Orange
+  6: '#16a34a', // Green
+  7: '#991b1b', // Maroon
   8: '#111111', // Black
-  9: '#ffcc00', // Stripes start
-  10: '#0066cc',
-  11: '#cc2200',
-  12: '#6600aa',
-  13: '#ff7700',
-  14: '#008800',
-  15: '#882222',
+  9: '#facc15', // Stripes
+  10: '#2563eb',
+  11: '#dc2626',
+  12: '#7c3aed',
+  13: '#ea580c',
+  14: '#16a34a',
+  15: '#991b1b',
 };

@@ -26,12 +26,21 @@ interface PoolTableProps {
 const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>(initialGameState());
-  const [isAiming, setIsAiming] = useState(true);
-  const [isCharging, setIsCharging] = useState(false);
-  const [aimAngle, setAimAngle] = useState(0);
-  const [shotPower, setShotPower] = useState(0);
-  const [chargeStartDist, setChargeStartDist] = useState(0);
   const [isMoving, setIsMoving] = useState(false);
+  const [connecting, setConnecting] = useState(gameMode === 'online');
+  
+  const aimAngleRef = useRef(0);
+  const shotPowerRef = useRef(0);
+  const isChargingRef = useRef(false);
+  const isAimingRef = useRef(true);
+  const chargeStartDistRef = useRef(0);
+  const ballsRef = useRef<Ball[]>(gameState.balls);
+  const firstHitRef = useRef<Ball | null>(null);
+  const pottedThisTurnRef = useRef<Ball[]>([]);
+  const isMounted = useRef(true);
+
+  const woodPatternRef = useRef<CanvasPattern | null>(null);
+  const feltPatternRef = useRef<CanvasPattern | null>(null);
 
   const pockets: Pocket[] = [
     { x: RAIL_SIZE, y: RAIL_SIZE, radius: POCKET_RADIUS },
@@ -42,14 +51,13 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
     { x: TABLE_WIDTH - RAIL_SIZE, y: TABLE_HEIGHT - RAIL_SIZE, radius: POCKET_RADIUS },
   ];
 
-  // Ref for mutable state to avoid closure traps in the loop
-  const ballsRef = useRef<Ball[]>(gameState.balls);
-  const firstHitRef = useRef<Ball | null>(null);
-  const pottedThisTurnRef = useRef<Ball[]>([]);
-
-  // Textures
-  const woodPatternRef = useRef<CanvasPattern | null>(null);
-  const feltPatternRef = useRef<CanvasPattern | null>(null);
+  useEffect(() => {
+    isMounted.current = true;
+    if (gameMode === 'online') {
+      setTimeout(() => isMounted.current && setConnecting(false), 1500);
+    }
+    return () => { isMounted.current = false; };
+  }, [gameMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -57,24 +65,23 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Generate Textures
     const wCanvas = document.createElement('canvas');
     wCanvas.width = 128; wCanvas.height = 128;
     const wCtx = wCanvas.getContext('2d')!;
-    wCtx.fillStyle = '#2a1810';
+    wCtx.fillStyle = '#111111';
     wCtx.fillRect(0,0,128,128);
-    for(let i=0; i<40; i++) {
-        wCtx.fillStyle = `rgba(0,0,0,${0.05 + Math.random()*0.1})`;
-        wCtx.fillRect(0, Math.random()*128, 128, Math.random()*4);
+    for(let i=0; i<30; i++) {
+        wCtx.fillStyle = `rgba(255,255,255,${0.02 + Math.random()*0.02})`;
+        wCtx.fillRect(0, Math.random()*128, 128, Math.random()*2);
     }
     woodPatternRef.current = ctx.createPattern(wCanvas, 'repeat');
 
     const fCanvas = document.createElement('canvas');
     fCanvas.width = 256; fCanvas.height = 256;
     const fCtx = fCanvas.getContext('2d')!;
-    fCtx.fillStyle = '#0a3d12';
+    fCtx.fillStyle = '#052c14';
     fCtx.fillRect(0,0,256,256);
-    for(let i=0; i<4000; i++) {
+    for(let i=0; i<6000; i++) {
         fCtx.fillStyle = `rgba(255,255,255,${Math.random()*0.03})`;
         fCtx.fillRect(Math.random()*256, Math.random()*256, 1, 1);
     }
@@ -82,12 +89,12 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
   }, []);
 
   const handleTurnEnd = useCallback(() => {
+    if (!isMounted.current) return;
     setGameState(prev => {
       let nextTurn = prev.currentTurn;
       let nextP1Type = prev.p1Type;
       let nextP2Type = prev.p2Type;
       let nextTableOpen = prev.tableOpen;
-      let nextGameOver = prev.gameOver;
       let turnChange = true;
       let scratch = false;
 
@@ -95,7 +102,6 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
       const potted = pottedThisTurnRef.current;
       const hit = firstHitRef.current;
 
-      // Rules Check
       if (cueBall.inPocket) {
         scratch = true;
         cueBall.inPocket = false;
@@ -106,16 +112,9 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
 
       const eightPotted = potted.find(b => b.type === '8ball');
       if (eightPotted) {
-        // Logic for win/loss
         const myType = prev.currentTurn === 1 ? nextP1Type : nextP2Type;
         const remaining = ballsRef.current.filter(b => !b.inPocket && b.type === myType).length;
-        if (remaining === 0) {
-           nextGameOver = true;
-           return { ...prev, gameOver: true, winner: prev.currentTurn };
-        } else {
-           nextGameOver = true;
-           return { ...prev, gameOver: true, winner: prev.currentTurn === 1 ? 2 : 1 };
-        }
+        return { ...prev, gameOver: true, winner: (remaining === 0 ? prev.currentTurn : (prev.currentTurn === 1 ? 2 : 1)), status: 'GAME OVER' };
       }
 
       if (nextTableOpen) {
@@ -135,19 +134,14 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
         const myType = prev.currentTurn === 1 ? nextP1Type : nextP2Type;
         const pottedMyBall = potted.some(b => b.type === myType);
         const correctHit = hit && hit.type === myType;
-
-        if (pottedMyBall && correctHit && !scratch) {
-          turnChange = false;
-        }
+        if (pottedMyBall && correctHit && !scratch) turnChange = false;
       }
 
       if (turnChange) nextTurn = prev.currentTurn === 1 ? 2 : 1;
-
-      // Reset turn local state
       firstHitRef.current = null;
       pottedThisTurnRef.current = [];
       setIsMoving(false);
-      setIsAiming(true);
+      isAimingRef.current = true;
 
       return {
         ...prev,
@@ -165,34 +159,18 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
     if (!cueBall) return;
     cueBall.vx = Math.cos(angle) * power;
     cueBall.vy = Math.sin(angle) * power;
-    setIsAiming(false);
+    isAimingRef.current = false;
     setIsMoving(true);
   }, []);
 
-  // CPU Turn Logic
-  useEffect(() => {
-    if (gameMode === 'robot' && gameState.currentTurn === 2 && !isMoving && !gameState.gameOver) {
-      const timer = setTimeout(() => {
-        const cueBall = ballsRef.current.find(b => b.type === 'cue')!;
-        const targets = ballsRef.current.filter(b => !b.inPocket && b.type !== 'cue');
-        const target = targets[Math.floor(Math.random() * targets.length)];
-        const dx = target.x - cueBall.x;
-        const dy = target.y - cueBall.y;
-        fireShot(20 + Math.random() * 15, Math.atan2(dy, dx));
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState.currentTurn, gameMode, isMoving, gameState.gameOver, fireShot]);
-
-  // Main Loop
   useEffect(() => {
     let animationId: number;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d', { alpha: false })!;
 
     const frame = () => {
-      // 1. Physics
+      // Physics
       let anyMoving = false;
       for (let s = 0; s < SUB_STEPS; s++) {
         ballsRef.current.forEach(ball => {
@@ -210,130 +188,115 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
         if (hit && !firstHitRef.current) firstHitRef.current = hit;
       }
 
-      if (isMoving && !anyMoving) {
-        handleTurnEnd();
-      }
+      if (isMoving && !anyMoving) handleTurnEnd();
 
-      // 2. Render
-      ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
-      
-      // Draw Table
-      ctx.fillStyle = woodPatternRef.current || '#2a1810';
+      // Table Render
+      ctx.fillStyle = woodPatternRef.current || '#111';
       ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
-      ctx.fillStyle = feltPatternRef.current || '#0a3d12';
+      ctx.fillStyle = feltPatternRef.current || '#052c14';
       ctx.fillRect(RAIL_SIZE, RAIL_SIZE, PLAY_AREA_W, PLAY_AREA_H);
 
-      // Pockets
       pockets.forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#000';
-        ctx.fill();
-        const grad = ctx.createRadialGradient(p.x, p.y, p.radius * 0.4, p.x, p.y, p.radius);
-        grad.addColorStop(0, '#111');
-        grad.addColorStop(1, '#000');
-        ctx.fillStyle = grad;
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#000'; ctx.fill();
       });
 
-      // Balls
+      // Balls Render
       ballsRef.current.forEach(ball => {
         if (ball.inPocket) return;
-        // Shadow
-        ctx.beginPath();
-        ctx.arc(ball.x + 3, ball.y + 3, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.fill();
-        // Body
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = ball.color;
-        ctx.fill();
         
+        // Shadow
+        ctx.beginPath(); ctx.arc(ball.x + 2, ball.y + 2, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
+
+        // Ball Body
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color; ctx.fill();
+        
+        // Stripe Overlay
         if (ball.type === 'stripe') {
           ctx.save();
-          ctx.beginPath();
-          ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+          ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
           ctx.clip();
-          ctx.fillStyle = '#fff';
+          ctx.fillStyle = '#ffffff';
           ctx.fillRect(ball.x - BALL_RADIUS, ball.y - 7, BALL_RADIUS * 2, 14);
           ctx.restore();
         }
 
-        // Highlight
+        // Ball Numbering
+        if (ball.type !== 'cue') {
+            // White circle for number
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, BALL_RADIUS * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            // Numeral
+            ctx.fillStyle = '#000000';
+            ctx.font = `bold ${BALL_RADIUS * 0.6}px Inter, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(ball.num.toString(), ball.x, ball.y + 0.5);
+        }
+
+        // 3D Highlight
         const grad = ctx.createRadialGradient(ball.x - 4, ball.y - 4, 1, ball.x - 4, ball.y - 4, 8);
-        grad.addColorStop(0, 'rgba(255,255,255,0.6)');
+        grad.addColorStop(0, 'rgba(255,255,255,0.4)');
         grad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2); ctx.fill();
       });
 
-      // Cue & Aim Guide
+      // Aiming UI
       const cueBall = ballsRef.current.find(b => b.type === 'cue');
-      if (cueBall && isAiming && !isMoving && !gameState.gameOver && (gameMode === 'local' || gameState.currentTurn === 1)) {
-        // Aim Guide Line
-        ctx.save();
-        ctx.beginPath();
-        ctx.setLineDash([5, 5]);
-        ctx.moveTo(cueBall.x, cueBall.y);
-        const guideEndX = cueBall.x + Math.cos(aimAngle) * 600;
-        const guideEndY = cueBall.y + Math.sin(aimAngle) * 600;
-        ctx.lineTo(guideEndX, guideEndY);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Advanced Prediction (Ghost Ball)
+      if (cueBall && isAimingRef.current && !isMoving && !gameState.gameOver && !connecting) {
+        const curAngle = aimAngleRef.current;
         let closest = null;
         let minDist = Infinity;
         ballsRef.current.forEach(b => {
           if (b.id === 0 || b.inPocket) return;
-          const dx = b.x - cueBall.x;
-          const dy = b.y - cueBall.y;
-          const dot = dx * Math.cos(aimAngle) + dy * Math.sin(aimAngle);
+          const dx = b.x - cueBall.x; const dy = b.y - cueBall.y;
+          const dot = dx * Math.cos(curAngle) + dy * Math.sin(curAngle);
           if (dot > 0) {
-            const perpDist = Math.abs(dx * Math.sin(aimAngle) - dy * Math.cos(aimAngle));
+            const perpDist = Math.abs(dx * Math.sin(curAngle) - dy * Math.cos(curAngle));
             if (perpDist < BALL_RADIUS * 2) {
               const impactDist = dot - Math.sqrt((BALL_RADIUS * 2) ** 2 - perpDist ** 2);
-              if (impactDist < minDist) {
-                minDist = impactDist;
-                closest = b;
-              }
+              if (impactDist < minDist) { minDist = impactDist; closest = b; }
             }
           }
         });
 
-        if (closest) {
-          const impactX = cueBall.x + Math.cos(aimAngle) * minDist;
-          const impactY = cueBall.y + Math.sin(aimAngle) * minDist;
-          
-          // Ghost Ball
-          ctx.beginPath();
-          ctx.arc(impactX, impactY, BALL_RADIUS, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-          ctx.setLineDash([]);
-          ctx.stroke();
+        const impactDist = closest ? minDist : 800;
+        const impactX = cueBall.x + Math.cos(curAngle) * impactDist;
+        const impactY = cueBall.y + Math.sin(curAngle) * impactDist;
 
-          // Target Ball Direction (Tangent)
+        ctx.save();
+        ctx.beginPath(); ctx.setLineDash([5, 5]);
+        ctx.moveTo(cueBall.x, cueBall.y); ctx.lineTo(impactX, impactY);
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.stroke();
+
+        if (closest) {
+          ctx.beginPath(); ctx.arc(impactX, impactY, BALL_RADIUS, 0, Math.PI * 2);
+          ctx.setLineDash([]); ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.stroke();
+
           const targetAngle = Math.atan2(closest.y - impactY, closest.x - impactX);
-          ctx.beginPath();
-          ctx.moveTo(closest.x, closest.y);
+          ctx.beginPath(); ctx.moveTo(closest.x, closest.y);
           ctx.lineTo(closest.x + Math.cos(targetAngle) * 100, closest.y + Math.sin(targetAngle) * 100);
-          ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2; ctx.stroke();
+
+          const cueAngle = targetAngle + Math.PI/2 * (Math.sin(curAngle - targetAngle) > 0 ? 1 : -1);
+          ctx.beginPath(); ctx.setLineDash([2, 4]);
+          ctx.moveTo(impactX, impactY); ctx.lineTo(impactX + Math.cos(cueAngle) * 60, impactY + Math.sin(cueAngle) * 60);
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.stroke();
         }
         ctx.restore();
 
-        // Visual Cue Stick
+        // Cue Stick
         ctx.save();
-        ctx.translate(cueBall.x, cueBall.y);
-        ctx.rotate(aimAngle + Math.PI);
-        const pullback = 20 + shotPower * 4;
-        ctx.fillStyle = '#5d4037';
-        ctx.fillRect(pullback, -4, 300, 8);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(pullback, -4, 10, 8);
+        ctx.translate(cueBall.x, cueBall.y); ctx.rotate(curAngle + Math.PI);
+        const pullback = 25 + shotPowerRef.current * 3.5;
+        ctx.fillStyle = '#333'; ctx.fillRect(pullback, -4, 280, 8);
+        ctx.fillStyle = '#22d3ee'; ctx.fillRect(pullback, -4, 12, 8);
         ctx.restore();
       }
 
@@ -342,83 +305,109 @@ const PoolTable: React.FC<PoolTableProps> = ({ gameMode, role, roomCode, onExit 
 
     animationId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(animationId);
-  }, [isAiming, aimAngle, isMoving, shotPower, gameState.gameOver, handleTurnEnd, gameMode, gameState.currentTurn]);
+  }, [isMoving, gameState.gameOver, connecting, handleTurnEnd]);
 
-  // Input Handling
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isAiming || isMoving || (gameMode !== 'local' && gameState.currentTurn !== 1)) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  const handleInputMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isMounted.current || isMoving || gameState.gameOver || connecting) return;
+    const canvas = canvasRef.current; if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const cueBall = ballsRef.current.find(b => b.id === 0)!;
-    setChargeStartDist(Math.hypot(x - cueBall.x, y - cueBall.y));
-    setIsCharging(true);
+    if (!isChargingRef.current) aimAngleRef.current = Math.atan2(clientY - rect.top - cueBall.y, clientX - rect.left - cueBall.x);
+    else shotPowerRef.current = Math.max(0, Math.min((Math.hypot(clientX - rect.left - cueBall.x, clientY - rect.top - cueBall.y) - chargeStartDistRef.current) / 3, MAX_POWER));
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isAiming || isMoving || (gameMode !== 'local' && gameState.currentTurn !== 1)) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  const handleInputStart = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isMounted.current || isMoving || gameState.gameOver || connecting) return;
+    const canvas = canvasRef.current; if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const cueBall = ballsRef.current.find(b => b.id === 0)!;
+    chargeStartDistRef.current = Math.hypot(clientX - rect.left - cueBall.x, clientY - rect.top - cueBall.y);
+    isChargingRef.current = true;
+  };
 
-    if (!isCharging) {
-      setAimAngle(Math.atan2(y - cueBall.y, x - cueBall.x));
-    } else {
-      const dist = Math.hypot(x - cueBall.x, y - cueBall.y);
-      setShotPower(Math.max(0, Math.min((dist - chargeStartDist) / 4, MAX_POWER)));
+  const handleInputEnd = () => {
+    if (isChargingRef.current) {
+      if (shotPowerRef.current > 1.5) fireShot(shotPowerRef.current, aimAngleRef.current);
+      isChargingRef.current = false; shotPowerRef.current = 0;
     }
   };
 
-  const handleMouseUp = () => {
-    if (isCharging) {
-      if (shotPower > 2) {
-        fireShot(shotPower, aimAngle);
-      }
-      setIsCharging(false);
-      setShotPower(0);
+  useEffect(() => {
+    if (gameMode === 'robot' && gameState.currentTurn === 2 && !isMoving && !gameState.gameOver) {
+      const timer = setTimeout(() => {
+        if (!isMounted.current) return;
+        const cueBall = ballsRef.current.find(b => b.type === 'cue')!;
+        const targets = ballsRef.current.filter(b => !b.inPocket && b.type !== 'cue');
+        const target = targets[Math.floor(Math.random() * targets.length)];
+        fireShot(15 + Math.random() * 20, Math.atan2(target.y - cueBall.y, target.x - cueBall.x));
+      }, 2000);
+      return () => clearTimeout(timer);
     }
-  };
+  }, [gameState.currentTurn, gameMode, isMoving, gameState.gameOver, fireShot]);
 
   return (
-    <div className="flex flex-col items-center select-none">
+    <div className="flex flex-col items-center select-none w-full max-w-5xl px-4">
+      {gameMode === 'online' && (
+        <div className="w-full bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 py-2 px-6 rounded-xl mb-4 flex justify-between items-center animate-in fade-in slide-in-from-top duration-500">
+           <span className="text-xs font-black tracking-widest uppercase">Room: {roomCode}</span>
+           <span className="text-xs font-bold bg-cyan-500 text-black px-2 py-0.5 rounded">CONNECTED</span>
+        </div>
+      )}
+
       <HUD gameState={gameState} onExit={onExit} />
       
-      <div className="relative mt-8 shadow-[0_40px_100px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden border-4 border-neutral-800">
+      <div className="relative mt-4 shadow-[0_50px_100px_rgba(0,0,0,1)] rounded-3xl overflow-hidden border-[6px] border-neutral-800 touch-none">
         <canvas
           ref={canvasRef}
           width={TABLE_WIDTH}
           height={TABLE_HEIGHT}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          className="bg-neutral-900 cursor-crosshair"
+          onMouseDown={handleInputStart}
+          onMouseMove={handleInputMove}
+          onMouseUp={handleInputEnd}
+          onMouseLeave={handleInputEnd}
+          onTouchStart={handleInputStart}
+          onTouchMove={handleInputMove}
+          onTouchEnd={handleInputEnd}
+          className="bg-black cursor-crosshair max-w-full h-auto"
         />
 
-        {/* Power Meter Overlay */}
-        <div className="absolute left-4 bottom-8 w-6 h-48 bg-black/40 border border-white/20 rounded-full overflow-hidden">
-          <div 
-            className="absolute bottom-0 w-full transition-all duration-75"
-            style={{ 
-              height: `${(shotPower / MAX_POWER) * 100}%`,
-              background: 'linear-gradient(to top, #22c55e, #eab308, #ef4444)'
-            }}
-          />
+        {connecting && (
+          <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center z-10">
+            <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm font-black text-white tracking-widest">CONNECTING TO ROOM...</p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 flex gap-8 items-center justify-center opacity-40 hover:opacity-100 transition-opacity">
+        <div className="flex flex-col items-center">
+           <div className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Drag to aim</div>
+           <div className="w-6 h-6 rounded-full border border-neutral-700 flex items-center justify-center">
+              <div className="w-1 h-1 bg-white rounded-full" />
+           </div>
+        </div>
+        <div className="flex flex-col items-center">
+           <div className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Power Meter</div>
+           <div className="w-24 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+              <div className="h-full bg-cyan-500 w-1/3" />
+           </div>
         </div>
       </div>
 
       {gameState.gameOver && (
-        <div className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-in fade-in duration-700">
-          <h1 className="text-6xl font-black text-yellow-500 mb-2 drop-shadow-lg tracking-tighter">
+        <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 animate-in zoom-in duration-300">
+          <h1 className="text-7xl font-black text-cyan-400 italic drop-shadow-[0_0_20px_#22d3ee66]">
             {gameState.winner === 1 ? 'PLAYER 1 WINS' : 'PLAYER 2 WINS'}
           </h1>
-          <p className="text-white/60 mb-8 uppercase tracking-widest font-semibold">Table Cleared</p>
           <button 
             onClick={() => window.location.reload()}
-            className="px-10 py-4 bg-yellow-500 text-black font-bold rounded-xl hover:bg-yellow-400 transition-all hover:scale-105"
+            className="mt-12 px-12 py-5 bg-cyan-500 text-black font-black rounded-2xl hover:bg-cyan-400 transition-all hover:scale-110 active:scale-95 shadow-[0_10px_40px_rgba(34,211,238,0.3)]"
           >
-            MAIN MENU
+            RETURN TO MENU
           </button>
         </div>
       )}

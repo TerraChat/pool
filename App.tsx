@@ -1,17 +1,21 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import PoolTable from './components/PoolTable';
 import MainMenu from './components/MainMenu';
 import Lobby from './components/Lobby';
-import HUD from './components/HUD';
-import { GameMode, GameState, PlayerRole } from './types';
-import { initialGameState } from './services/gameLogic';
+import { GameMode, PlayerRole } from './types';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<'menu' | 'lobby' | 'game'>('menu');
   const [gameMode, setGameMode] = useState<GameMode>('local');
   const [role, setRole] = useState<PlayerRole>(null);
   const [roomCode, setRoomCode] = useState<string | null>(null);
+
+  const resetToMenu = useCallback(() => {
+    setScreen('menu');
+    setRoomCode(null);
+    setRole(null);
+  }, []);
 
   const handleStartLocal = () => {
     setGameMode('local');
@@ -36,10 +40,6 @@ const App: React.FC = () => {
     setScreen('game');
   };
 
-  const handleGameOver = () => {
-    // We can show an overlay here or just reset
-  };
-
   return (
     <div className="relative w-full h-screen bg-neutral-950 flex flex-col items-center justify-center overflow-hidden">
       {screen === 'menu' && (
@@ -52,18 +52,19 @@ const App: React.FC = () => {
 
       {screen === 'lobby' && (
         <Lobby 
-          onBack={() => setScreen('menu')} 
+          onBack={resetToMenu} 
           onJoin={handleJoinRoom} 
         />
       )}
 
       {screen === 'game' && (
-        <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-500">
+        <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in duration-700">
           <PoolTable 
+            key={roomCode || 'single'} // Key ensures full remount if game changes
             gameMode={gameMode} 
             role={role} 
             roomCode={roomCode} 
-            onExit={() => setScreen('menu')}
+            onExit={resetToMenu}
           />
         </div>
       )}
