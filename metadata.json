@@ -1,5 +1,0 @@
-{
-  "name": "pool",
-  "description": "A high-performance 8-ball pool simulator with realistic physics, advanced aiming guides, and real-time multiplayer rooms.",
-  "requestFramePermissions": []
-}
